@@ -24,15 +24,18 @@ type Output = [Double]
 type Error = Double
 type Weight = Double
 
-quadError :: Double -> Double -> Double
+quadError :: Double -> Double -> Error
 quadError t o = (t - o) * (1 - o) * o
+
+totalError :: Output -> Output -> [Error]
+totalError = zipWith quadError
 
 elementwiseProduct :: [Double] -> [Double] -> [Double]
 elementwiseProduct = zipWith (*)
 
 stepFunction :: Double -> Double
 stepFunction x
-    | x > 0 = 1
+    | x > 0.5 = 1
     | otherwise = 0
 
 sigmoid :: Double -> Double
@@ -46,6 +49,18 @@ randomNeuron :: Int -> IO Neuron
 randomNeuron numWeights = do
     ws <- replicateM numWeights (randomRIO (-1, 1) :: IO Double)
     return $ Neuron ws
+
+randomLayer :: Int -> Int -> IO Layer
+randomLayer numNeurons numWeights = do
+    ns <-  replicateM numNeurons $ randomNeuron numWeights
+    return $ Layer ns
+
+randomNetwork :: Int -> [Int] -> IO Network
+randomNetwork input ns = do
+    let numNeurons = input:ns
+    let ls = zip (tail numNeurons) numNeurons
+    layers <- mapM (uncurry randomLayer) ls
+    return . Network $ layers
 
 feedForward :: Input -> Network -> Output
 feedForward i (Network []) = i
@@ -84,8 +99,8 @@ backPropagate acc (l1:l2) = backPropagate (acc ++ [(el1, l1')]) l2
 groupOutputs :: (Output, Layer) -> [(Output, Neuron)]
 groupOutputs (outputs, Layer ns) = map ((,) outputs) ns
 
-train :: TrainingExample -> Network -> Network
-train t n = backPropagate [(error, Layer [])] outputs
+train :: Network -> TrainingExample -> Network
+train n t = backPropagate [(error, Layer [])] outputs
     where activations = scanForward (inputs t) n
           error = zipWith quadError (target t) $ last activations
           outputs = zipWith (curry groupOutputs) (tail . reverse $ activations) (reverse . layers $ n)
